@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import {
   GraduationCap,
-  LayoutDashboard,
   UserRound,
   BookOpen,
   ClipboardCheck,
@@ -11,6 +10,7 @@ import {
   LoaderCircle,
   AlertCircle,
   ArrowRight,
+  Award,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/superbase";
@@ -113,8 +113,12 @@ export default function StudentDashboard() {
   const admissionNumber =
     student?.admission_number || "Not available";
 
-  const studentClass =
-    student?.class_name || "Not assigned";
+  const isGraduated =
+    student?.status?.toLowerCase() === "graduated";
+
+  const studentClass = isGraduated
+    ? "Graduated"
+    : student?.class_name || "Not assigned";
 
   if (loading) {
     return (
@@ -199,14 +203,36 @@ export default function StudentDashboard() {
           </div>
         )}
 
+        {isGraduated && (
+          <div className="mb-8 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <div className="rounded-xl bg-emerald-100 p-3 text-emerald-700">
+              <Award size={25} />
+            </div>
+
+            <div>
+              <h3 className="font-bold text-emerald-900">
+                Congratulations, Graduate!
+              </h3>
+
+              <p className="mt-1 text-sm leading-6 text-emerald-800">
+                You have successfully completed your secondary
+                school education. You can continue accessing
+                your previous academic records and results here.
+              </p>
+            </div>
+          </div>
+        )}
+
         <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="inline-flex rounded-xl bg-blue-50 p-3 text-blue-600">
               <UserRound size={24} />
             </div>
+
             <p className="mt-5 text-sm text-slate-500">
               Student name
             </p>
+
             <h3 className="mt-1 break-words text-lg font-bold text-slate-900">
               {studentName}
             </h3>
@@ -216,9 +242,11 @@ export default function StudentDashboard() {
             <div className="inline-flex rounded-xl bg-purple-50 p-3 text-purple-600">
               <GraduationCap size={24} />
             </div>
+
             <p className="mt-5 text-sm text-slate-500">
               Admission number
             </p>
+
             <h3 className="mt-1 break-words text-lg font-bold text-slate-900">
               {admissionNumber}
             </h3>
@@ -228,9 +256,11 @@ export default function StudentDashboard() {
             <div className="inline-flex rounded-xl bg-emerald-50 p-3 text-emerald-600">
               <BookOpen size={24} />
             </div>
+
             <p className="mt-5 text-sm text-slate-500">
-              Class
+              {isGraduated ? "Academic status" : "Class"}
             </p>
+
             <h3 className="mt-1 break-words text-lg font-bold text-slate-900">
               {studentClass}
             </h3>
@@ -243,39 +273,40 @@ export default function StudentDashboard() {
           </h3>
 
           <p className="mt-2 text-sm text-slate-500">
-            Access your attendance, examination results, and
-            academic information.
+            {isGraduated
+              ? "Access your previous academic records and examination results."
+              : "Access your attendance, examination results, and academic information."}
           </p>
 
           <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Attendance */}
-            <Link
-              to="/student/attendance"
-              className="group block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-md"
-            >
-              <div className="inline-flex rounded-xl bg-emerald-50 p-3 text-emerald-600">
-                <ClipboardCheck size={23} />
-              </div>
+            {!isGraduated && (
+              <Link
+                to="attendance"
+                className="group block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-md"
+              >
+                <div className="inline-flex rounded-xl bg-emerald-50 p-3 text-emerald-600">
+                  <ClipboardCheck size={23} />
+                </div>
 
-              <h4 className="mt-4 font-bold text-slate-900">
-                Attendance
-              </h4>
+                <h4 className="mt-4 font-bold text-slate-900">
+                  Attendance
+                </h4>
 
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                View your attendance percentage, absences, and
-                daily records.
-              </p>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  View your attendance percentage, absences,
+                  and daily records.
+                </p>
 
-              <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                View attendance
-                <ArrowRight
-                  size={14}
-                  className="transition group-hover:translate-x-1"
-                />
-              </span>
-            </Link>
+                <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  View attendance
+                  <ArrowRight
+                    size={14}
+                    className="transition group-hover:translate-x-1"
+                  />
+                </span>
+              </Link>
+            )}
 
-            {/* Results */}
             <Link
               to="/student/results"
               className="group block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-md"
@@ -289,8 +320,8 @@ export default function StudentDashboard() {
               </h4>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Access examination results, subject scores, and
-                grades.
+                Access examination results, subject scores,
+                and grades.
               </p>
 
               <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
@@ -301,25 +332,6 @@ export default function StudentDashboard() {
                 />
               </span>
             </Link>
-
-            {/* Academic information */}
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="inline-flex rounded-xl bg-indigo-50 p-3 text-indigo-600">
-                <LayoutDashboard size={23} />
-              </div>
-
-              <h4 className="mt-4 font-bold text-slate-900">
-                Academic Information
-              </h4>
-
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                View your academic information and school updates.
-              </p>
-
-              <span className="mt-4 inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                Coming soon
-              </span>
-            </article>
           </div>
         </section>
       </main>

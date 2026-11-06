@@ -35,7 +35,10 @@ function Student() {
   const { profile } = useAuth();
 
   const [students, setStudents] = useState([]);
+  const [graduationRecords, setGraduationRecords] = useState([]);
   const [search, setSearch] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -50,26 +53,39 @@ function Student() {
   const loadStudents = useCallback(async () => {
     if (!supabase || !profile?.school_id) {
       setStudents([]);
+      setGraduationRecords([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
+    setError("");
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from("students")
-        .select("*")
-        .eq("school_id", profile.school_id)
-        .order("created_at", { ascending: false });
+      const [studentsResult, graduationResult] = await Promise.all([
+        supabase
+          .from("students")
+          .select("*")
+          .eq("school_id", profile.school_id)
+          .order("created_at", { ascending: false }),
 
-      if (fetchError) throw fetchError;
+        supabase
+          .from("student_promotion_decisions")
+          .select("*")
+          .eq("school_id", profile.school_id)
+          .eq("decision", "graduated")
+          .eq("decision_status", "executed")
+          .order("created_at", { ascending: false }),
+      ]);
 
-      setStudents(data || []);
-      setError("");
+      if (studentsResult.error) throw studentsResult.error;
+      if (graduationResult.error) throw graduationResult.error;
+
+      setStudents(studentsResult.data || []);
+      setGraduationRecords(graduationResult.data || []);
     } catch (err) {
       console.error("Could not load students:", err);
-      setError("Could not load students. Please try refreshing.");
+      setError(err.message || "Could not load students.");
     } finally {
       setLoading(false);
     }
@@ -88,6 +104,8 @@ function Student() {
   }
 
   function openEditForm(student) {
+    if (student.status === "graduated") return;
+
     setForm({
       ...emptyForm,
       ...student,
@@ -159,11 +177,20 @@ function Student() {
       };
 
       if (editingId) {
+        const existingStudent = students.find(
+          (student) => student.id === editingId
+        );
+
+        if (existingStudent?.status === "graduated") {
+          throw new Error("Graduated student records cannot be edited here.");
+        }
+
         const { data, error: updateError } = await supabase
           .from("students")
           .update(studentData)
           .eq("id", editingId)
           .eq("school_id", profile.school_id)
+          .eq("status", "active")
           .select()
           .maybeSingle();
 
@@ -171,7 +198,7 @@ function Student() {
 
         if (!data) {
           throw new Error(
-            "Student could not be updated. Check your permissions."
+            "Student could not be updated. Check permissions or student status."
           );
         }
 
@@ -192,7 +219,7 @@ function Student() {
             const details = await functionError.context?.json();
             if (details?.error) message = details.error;
           } catch {
-            // Use the original error when no JSON response is available.
+            // Keep original error.
           }
 
           throw new Error(message);
@@ -227,6 +254,11 @@ function Student() {
   }
 
   async function handleDelete(student) {
+    if (student.status === "graduated") {
+      setError("Graduated students cannot be deleted from this page.");
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete ${student.first_name} ${student.last_name}? This action cannot be undone.`
     );
@@ -241,7 +273,8 @@ function Student() {
         .from("students")
         .delete()
         .eq("id", student.id)
-        .eq("school_id", profile.school_id);
+        .eq("school_id", profile.school_id)
+        .neq("status", "graduated");
 
       if (deleteError) throw deleteError;
 
@@ -256,10 +289,33 @@ function Student() {
     }
   }
 
+  const activeStudents = students.filter(
+    (student) => student.status === "active"
+  );
+
+  const inactiveStudents = students.filter(
+    (student) => student.status === "inactive"
+  );
+
+  const graduatedStudents = students.filter(
+    (student) => student.status === "graduated"
+  );
+
+  const statusCounts = {
+    all: students.length,
+    active: activeStudents.length,
+    inactive: inactiveStudents.length,
+    graduated: graduatedStudents.length,
+  };
+
   const searchText = search.trim().toLowerCase();
 
-  const filteredStudents = students.filter((student) =>
-    [
+  const filteredStudents = students.filter((student) => {
+    const matchesStatus =
+      selectedStatus === "all" ||
+      student.status === selectedStatus;
+
+    const matchesSearch = [
       student.first_name,
       student.middle_name,
       student.last_name,
@@ -267,8 +323,58 @@ function Student() {
       student.class_name,
     ]
       .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(searchText))
-  );
+      .some((value) =>
+        String(value).toLowerCase().includes(searchText)
+      );
+
+    return matchesStatus && matchesSearch;
+  });
+
+  const graduationSession = (studentId) => {
+    const record = graduationRecords.find(
+      (item) => item.student_id === studentId
+    );
+
+    return record?.academic_session || "History unavailable";
+  };
+
+  const tabs = [
+    { label: "All", value: "all" },
+    { label: "Active", value: "active" },
+    { label: "Inactive", value: "inactive" },
+    { label: "Graduated", value: "graduated" },
+  ];
+
+  const stats = [
+    {
+      label: "All Students",
+      value: statusCounts.all,
+      color: "bg-blue-50 text-blue-600",
+      icon: Users,
+      status: "all",
+    },
+    {
+      label: "Active Students",
+      value: statusCounts.active,
+      color: "bg-green-50 text-green-600",
+      icon: UserRound,
+      status: "active",
+    },
+    {
+      label: "Inactive Students",
+      value: statusCounts.inactive,
+      color: "bg-orange-50 text-orange-600",
+      icon: Users,
+      status: "inactive",
+    },
+    {
+      label: "Graduated Students",
+      value: statusCounts.graduated,
+      color: "bg-purple-50 text-purple-600",
+      icon: GraduationCap,
+      status: "graduated",
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 text-slate-800 sm:p-6 lg:p-10">
@@ -317,73 +423,103 @@ function Student() {
             className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
           >
             {error}
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="ml-3 font-semibold underline"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
-        <div className="mt-7 grid gap-4 sm:grid-cols-2">
-          <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
-              <Users size={25} />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Total Students</p>
-              <p className="mt-1 text-2xl font-extrabold">
-                {students.length}
-              </p>
-            </div>
-          </div>
+        <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {stats.map((stat) => {
+            const Icon = stat.icon;
 
-          <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="rounded-xl bg-green-50 p-3 text-green-600">
-              <UserRound size={25} />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Active Students</p>
-              <p className="mt-1 text-2xl font-extrabold">
-                {students.filter((student) => student.status === "active").length}
-              </p>
-            </div>
-          </div>
+            return (
+              <button
+                key={stat.status}
+                type="button"
+                onClick={() => setSelectedStatus(stat.status)}
+                className={`flex items-center gap-4 rounded-2xl border bg-white p-5 text-left transition hover:shadow-md ${
+                  selectedStatus === stat.status
+                    ? "border-blue-500 ring-2 ring-blue-100"
+                    : "border-slate-200"
+                }`}
+              >
+                <div className={`rounded-xl p-3 ${stat.color}`}>
+                  <Icon size={25} />
+                </div>
+
+                <div>
+                  <p className="text-sm text-slate-500">{stat.label}</p>
+                  <p className="mt-1 text-2xl font-extrabold">
+                    {stat.value}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         <section className="mt-7 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-bold">Student Directory</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {filteredStudents.length} student
-                {filteredStudents.length === 1 ? "" : "s"} displayed
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <div className="relative min-w-0 flex-1 sm:w-72">
-                <Search
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search students..."
-                  className={`${inputClass} pl-10`}
-                />
+          <div className="border-b border-slate-100 p-5">
+            <div className="flex flex-col gap-4">
+              <div>
+                <h2 className="font-bold">Student Directory</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {filteredStudents.length} student
+                  {filteredStudents.length === 1 ? "" : "s"} displayed
+                </p>
               </div>
 
-              <button
-                type="button"
-                onClick={loadStudents}
-                disabled={loading}
-                className="rounded-xl border border-slate-200 px-3 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                aria-label="Refresh students"
-                title="Refresh students"
-              >
-                <RefreshCw
-                  size={18}
-                  className={loading ? "animate-spin" : ""}
-                />
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    onClick={() => setSelectedStatus(tab.value)}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                      selectedStatus === tab.value
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {tab.label} ({statusCounts[tab.value]})
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <div className="relative min-w-0 flex-1 sm:w-72">
+                  <Search
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search students..."
+                    className={`${inputClass} pl-10`}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadStudents}
+                  disabled={loading}
+                  className="rounded-xl border border-slate-200 px-3 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  aria-label="Refresh students"
+                  title="Refresh students"
+                >
+                  <RefreshCw
+                    size={18}
+                    className={loading ? "animate-spin" : ""}
+                  />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -404,16 +540,20 @@ function Student() {
               </div>
 
               <h3 className="mt-4 font-bold">
-                {search ? "No matching students" : "No students yet"}
+                {search
+                  ? "No matching students"
+                  : `No ${selectedStatus === "all" ? "" : selectedStatus} students found`}
               </h3>
 
               <p className="mx-auto mt-2 max-w-sm text-sm text-slate-500">
                 {search
                   ? "Try a different name, admission number, or class."
-                  : "Add your first student to build your school directory."}
+                  : selectedStatus === "graduated"
+                    ? "Graduated students will appear here after successful graduation."
+                    : "There are no student records in this category."}
               </p>
 
-              {!search && (
+              {!search && selectedStatus === "all" && (
                 <button
                   type="button"
                   onClick={openAddForm}
@@ -425,12 +565,13 @@ function Student() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left text-sm">
+              <table className="w-full min-w-[1000px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-5 py-4">Student</th>
                     <th className="px-5 py-4">Admission No.</th>
                     <th className="px-5 py-4">Class</th>
+                    <th className="px-5 py-4">Graduation Session</th>
                     <th className="px-5 py-4">Gender</th>
                     <th className="px-5 py-4">Status</th>
                     <th className="px-5 py-4 text-right">Actions</th>
@@ -439,7 +580,10 @@ function Student() {
 
                 <tbody className="divide-y divide-slate-100">
                   {filteredStudents.map((student) => (
-                    <tr key={student.id} className="transition hover:bg-slate-50">
+                    <tr
+                      key={student.id}
+                      className="transition hover:bg-slate-50"
+                    >
                       <td className="px-5 py-4">
                         <div className="font-semibold">
                           {student.first_name}{" "}
@@ -459,6 +603,12 @@ function Student() {
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
+                        {student.status === "graduated"
+                          ? graduationSession(student.id)
+                          : "—"}
+                      </td>
+
+                      <td className="px-5 py-4 text-slate-600">
                         {student.gender || "—"}
                       </td>
 
@@ -467,7 +617,9 @@ function Student() {
                           className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
                             student.status === "active"
                               ? "bg-green-50 text-green-700"
-                              : "bg-slate-100 text-slate-600"
+                              : student.status === "graduated"
+                                ? "bg-purple-50 text-purple-700"
+                                : "bg-slate-100 text-slate-600"
                           }`}
                         >
                           {student.status}
@@ -476,25 +628,31 @@ function Student() {
 
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEditForm(student)}
-                            title="Edit student"
-                            aria-label={`Edit ${student.first_name} ${student.last_name}`}
-                            className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
-                          >
-                            <Pencil size={17} />
-                          </button>
+                          {student.status !== "graduated" ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEditForm(student)}
+                                title="Edit student"
+                                className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                              >
+                                <Pencil size={17} />
+                              </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(student)}
-                            title="Delete student"
-                            aria-label={`Delete ${student.first_name} ${student.last_name}`}
-                            className="rounded-lg p-2 text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 size={17} />
-                          </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(student)}
+                                title="Delete student"
+                                className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 size={17} />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-xs font-semibold text-purple-600">
+                              Graduation completed
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -504,6 +662,23 @@ function Student() {
             </div>
           )}
         </section>
+
+        {selectedStatus === "graduated" && (
+          <section className="mt-7 rounded-2xl border border-purple-100 bg-purple-50 p-5">
+            <div className="flex items-center gap-3">
+              <GraduationCap className="text-purple-600" size={25} />
+              <div>
+                <h2 className="font-bold text-purple-900">
+                  Graduation Records
+                </h2>
+                <p className="mt-1 text-sm text-purple-700">
+                  {graduationRecords.length} executed graduation decision
+                  {graduationRecords.length === 1 ? "" : "s"} found.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {formOpen && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-3 py-6 sm:items-center sm:p-6">

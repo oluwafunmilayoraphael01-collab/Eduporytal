@@ -42,8 +42,7 @@ function SchoolApplications() {
   useEffect(() => {
     loadApplications();
   }, [loadApplications]);
-
-  async function reviewApplication(application, decision) {
+   async function reviewApplication(application, decision) {
     const action = decision === "approved" ? "approve" : "reject";
 
     const confirmed = window.confirm(

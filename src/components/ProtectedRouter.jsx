@@ -13,10 +13,14 @@ function ProtectedRoute({ allowedRoles }) {
     );
   }
 
+  // Redirect students to student login
   if (!user) {
+    const isStudentRoute =
+      location.pathname.startsWith("/student");
+
     return (
       <Navigate
-        to="/login"
+        to={isStudentRoute ? "/student-login" : "/login"}
         replace
         state={{ from: location }}
       />
@@ -24,21 +28,15 @@ function ProtectedRoute({ allowedRoles }) {
   }
 
   if (!profile) {
-    return (
-      <Navigate to="/unauthorized" replace />
-    );
+    return <Navigate to="/unauthorized" replace />;
   }
 
   if (profile.status !== "active") {
-    return (
-      <Navigate to="/unauthorized" replace />
-    );
+    return <Navigate to="/unauthorized" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(profile.role)) {
-    return (
-      <Navigate to="/unauthorized" replace />
-    );
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return <Outlet />;

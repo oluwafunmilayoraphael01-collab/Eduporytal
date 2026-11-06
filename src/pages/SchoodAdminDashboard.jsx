@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from "react";
 import {
   GraduationCap,
@@ -21,6 +20,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/superbase";
 import SchoolFees from "./SchoolFees";
 import CreateBursar from "./CreateBursar";
+import StudentPromotion from "./StudentPromotion";
 
 function SchoolDashboard() {
   const { user, profile, logout } = useAuth();
@@ -114,6 +114,11 @@ function SchoolDashboard() {
       label: "Assign Class / Subject",
       icon: UserRoundCog,
       to: "/school/assign-teacher",
+    },
+    {
+      label: "Student Promotion",
+      icon: RefreshCw,
+      to: null,
     },
     {
       label: "Fees Paid",
@@ -210,10 +215,7 @@ function SchoolDashboard() {
                   : "text-slate-600 hover:bg-slate-100"
               }`;
 
-              if (
-                item.label === "Fees Paid" ||
-                item.label === "Create Bursar Account"
-              ) {
+              if (item.to === null) {
                 return (
                   <button
                     key={item.label}
@@ -279,6 +281,8 @@ function SchoolDashboard() {
               <SchoolFees />
             ) : activeSection === "Create Bursar Account" ? (
               <CreateBursar />
+            ) : activeSection === "Student Promotion" ? (
+              <StudentPromotion />
             ) : (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-4">
@@ -460,7 +464,6 @@ function SchoolDashboard() {
                             <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
                               <UserRound size={23} />
                             </div>
-
                             <div>
                               <h3 className="font-bold">Manage Students</h3>
                               <p className="mt-1 text-sm text-slate-500">
@@ -478,7 +481,6 @@ function SchoolDashboard() {
                             <div className="rounded-xl bg-violet-50 p-3 text-violet-600">
                               <GraduationCap size={23} />
                             </div>
-
                             <div>
                               <h3 className="font-bold">Manage Teachers</h3>
                               <p className="mt-1 text-sm text-slate-500">
@@ -496,7 +498,6 @@ function SchoolDashboard() {
                             <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
                               <UserRoundCog size={23} />
                             </div>
-
                             <div>
                               <h3 className="font-bold">
                                 Assign Class / Subject
@@ -510,6 +511,24 @@ function SchoolDashboard() {
 
                         <button
                           type="button"
+                          onClick={() => setActiveSection("Student Promotion")}
+                          className="rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-blue-300 hover:shadow-sm"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+                              <RefreshCw size={23} />
+                            </div>
+                            <div>
+                              <h3 className="font-bold">Student Promotion</h3>
+                              <p className="mt-1 text-sm text-slate-500">
+                                Review and promote students to a new class.
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => setActiveSection("Fees Paid")}
                           className="rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-blue-300 hover:shadow-sm"
                         >
@@ -517,7 +536,6 @@ function SchoolDashboard() {
                             <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
                               <Wallet size={23} />
                             </div>
-
                             <div>
                               <h3 className="font-bold">Fees Paid</h3>
                               <p className="mt-1 text-sm text-slate-500">
@@ -539,7 +557,6 @@ function SchoolDashboard() {
                             <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
                               <UserPlus size={23} />
                             </div>
-
                             <div>
                               <h3 className="font-bold">
                                 Create Bursar Account

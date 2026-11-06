@@ -70,9 +70,15 @@ const getStudentClass = (student) =>
   student?.class_level ||
   "";
 
-const normalizeClass = (value) =>
-  String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+const normalizeClass = (value) => {
+  const className = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
 
+  // Make SSS1 equivalent to SS1, SSS2 to SS2, etc.
+  return className.replace(/^SSS([123])$/, "SS$1");
+};
 const isExamClass = (className) =>
   ["JSS3", "SS3"].includes(normalizeClass(className));
 
