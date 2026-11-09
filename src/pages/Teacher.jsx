@@ -27,12 +27,47 @@ function Teachers() {
   const [showForm, setShowForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // School branding
+  const [branding, setBranding] = useState({
+    logo_url: "",
+    primary_color: "#2563eb",
+  });
+
+  const [schoolName, setSchoolName] = useState("EduPortal");
+
+  const primaryColor = branding.primary_color || "#2563eb";
+
   const [form, setForm] = useState({
     full_name: "",
     email: "",
     password: "",
   });
 
+  // Load school branding
+  async function loadSchoolBranding() {
+    if (!profile?.school_id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("schools")
+        .select("name, logo_url, primary_color")
+        .eq("id", profile.school_id)
+        .single();
+
+      if (error) throw error;
+
+      setSchoolName(data.name || "EduPortal");
+
+      setBranding({
+        logo_url: data.logo_url || "",
+        primary_color: data.primary_color || "#2563eb",
+      });
+    } catch (err) {
+      console.error("Unable to load school branding:", err);
+    }
+  }
+
+  // Load teachers
   async function loadTeachers() {
     if (!profile?.school_id) {
       setTeachers([]);
@@ -65,6 +100,7 @@ function Teachers() {
 
   useEffect(() => {
     loadTeachers();
+    loadSchoolBranding();
   }, [profile?.school_id]);
 
   function handleInputChange(event) {
@@ -80,11 +116,13 @@ function Teachers() {
     setError("");
     setSuccess("");
     setShowPassword(false);
+
     setForm({
       full_name: "",
       email: "",
       password: "",
     });
+
     setShowForm(true);
   }
 
@@ -145,7 +183,7 @@ function Teachers() {
             const response = await functionError.context.json();
             if (response?.error) message = response.error;
           } catch {
-            // Keep the original function error.
+            // Keep original function error.
           }
         }
 
@@ -186,20 +224,47 @@ function Teachers() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Teachers"
-        description="Manage teacher profiles and teaching assignments."
-        action={
-          <button
-            type="button"
-            onClick={openForm}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            <Plus size={17} />
-            Add teacher
-          </button>
-        }
-      />
+      {/* Page heading */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          {branding.logo_url ? (
+            <img
+              src={branding.logo_url}
+              alt={schoolName}
+              className="h-12 w-12 rounded-xl border border-gray-100 object-contain"
+            />
+          ) : (
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-xl text-white"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <GraduationCap size={25} />
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs font-semibold" style={{ color: primaryColor }}>
+              {schoolName}
+            </p>
+            <h2 className="text-xl font-extrabold text-gray-900">
+              Teachers
+            </h2>
+            <p className="text-sm text-gray-500">
+              Manage teacher profiles and teaching assignments.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={openForm}
+          className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+          style={{ backgroundColor: primaryColor }}
+        >
+          <Plus size={17} />
+          Add teacher
+        </button>
+      </div>
 
       {success && (
         <div
@@ -207,11 +272,7 @@ function Teachers() {
           className="flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
         >
           <p>{success}</p>
-          <button
-            type="button"
-            onClick={() => setSuccess("")}
-            aria-label="Dismiss success message"
-          >
+          <button type="button" onClick={() => setSuccess("")}>
             <X size={18} />
           </button>
         </div>
@@ -223,21 +284,25 @@ function Teachers() {
           className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
         >
           <p>{error}</p>
-          <button
-            type="button"
-            onClick={() => setError("")}
-            aria-label="Dismiss error message"
-          >
+          <button type="button" onClick={() => setError("")}>
             <X size={18} />
           </button>
         </div>
       )}
 
+      {/* Teacher statistics */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5">
         <div className="flex items-center gap-4">
-          <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+          <div
+            className="rounded-xl p-3"
+            style={{
+              backgroundColor: `${primaryColor}15`,
+              color: primaryColor,
+            }}
+          >
             <GraduationCap size={24} />
           </div>
+
           <div>
             <p className="text-sm text-gray-500">Total teachers</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
@@ -247,6 +312,7 @@ function Teachers() {
         </div>
       </div>
 
+      {/* Teachers table */}
       <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="relative w-full sm:max-w-sm">
@@ -254,12 +320,14 @@ function Teachers() {
               size={18}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
+
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search teachers..."
               aria-label="Search teachers"
-              className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-3 text-sm outline-none focus:ring-2"
+              style={{ "--tw-ring-color": primaryColor }}
             />
           </div>
 
@@ -279,7 +347,13 @@ function Teachers() {
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px] text-left text-sm">
-            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <thead
+              className="text-xs uppercase"
+              style={{
+                backgroundColor: `${primaryColor}10`,
+                color: primaryColor,
+              }}
+            >
               <tr>
                 <th className="px-5 py-4">Teacher</th>
                 <th className="px-5 py-4">Subject</th>
@@ -292,6 +366,11 @@ function Teachers() {
               {loading ? (
                 <tr>
                   <td colSpan={4} className="px-5 py-10 text-center text-gray-500">
+                    <LoaderCircle
+                      size={22}
+                      className="mx-auto mb-2 animate-spin"
+                      style={{ color: primaryColor }}
+                    />
                     Loading teachers...
                   </td>
                 </tr>
@@ -306,12 +385,15 @@ function Teachers() {
                         Teacher account
                       </p>
                     </td>
+
                     <td className="px-5 py-4 text-gray-600">
                       Not assigned
                     </td>
+
                     <td className="px-5 py-4 text-gray-600">
                       Not assigned
                     </td>
+
                     <td className="px-5 py-4">
                       <span
                         className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
@@ -332,9 +414,11 @@ function Teachers() {
                       size={32}
                       className="mx-auto mb-3 text-gray-300"
                     />
+
                     <p className="font-semibold text-gray-700">
                       {search ? "No matching teachers" : "No teachers yet"}
                     </p>
+
                     <p className="mt-1 text-sm text-gray-500">
                       {search
                         ? "Try a different search term."
@@ -348,6 +432,7 @@ function Teachers() {
         </div>
       </section>
 
+      {/* Add teacher modal */}
       {showForm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
@@ -369,6 +454,7 @@ function Teachers() {
                 >
                   Add a teacher
                 </h2>
+
                 <p className="mt-1 text-sm text-gray-500">
                   Create a login account for your school's teacher.
                 </p>
@@ -402,6 +488,7 @@ function Teachers() {
                 >
                   Full name
                 </label>
+
                 <input
                   id="teacher-full-name"
                   name="full_name"
@@ -412,7 +499,8 @@ function Teachers() {
                   required
                   minLength={2}
                   maxLength={120}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:ring-2"
+                  style={{ "--tw-ring-color": primaryColor }}
                 />
               </div>
 
@@ -423,6 +511,7 @@ function Teachers() {
                 >
                   Email address
                 </label>
+
                 <input
                   id="teacher-email"
                   name="email"
@@ -433,7 +522,8 @@ function Teachers() {
                   autoComplete="email"
                   required
                   maxLength={254}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:ring-2"
+                  style={{ "--tw-ring-color": primaryColor }}
                 />
               </div>
 
@@ -457,7 +547,8 @@ function Teachers() {
                     required
                     minLength={8}
                     maxLength={128}
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-12 text-sm outline-none focus:ring-2"
+                    style={{ "--tw-ring-color": primaryColor }}
                   />
 
                   <button
@@ -488,7 +579,8 @@ function Teachers() {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ backgroundColor: primaryColor }}
                 >
                   {creating ? (
                     <>

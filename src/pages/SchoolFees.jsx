@@ -12,7 +12,6 @@ import {
   Search,
   Wallet,
   X,
-  Users,
 } from "lucide-react";
 import { supabase } from "../lib/superbase";
 
@@ -35,13 +34,22 @@ const initialPaymentForm = {
   notes: "",
 };
 
-const classOptions = [
-  { label: "JSS1", value: "JSS1", group: "Junior Secondary" },
-  { label: "JSS2", value: "JSS2", group: "Junior Secondary" },
-  { label: "JSS3", value: "JSS3", group: "Junior Secondary" },
-  { label: "SS1", value: "SS1", group: "Senior Secondary" },
-  { label: "SS2", value: "SS2", group: "Senior Secondary" },
-  { label: "SS3", value: "SS3", group: "Senior Secondary" },
+const primaryClassOptions = [
+  { label: "Primary 1", value: "Primary 1" },
+  { label: "Primary 2", value: "Primary 2" },
+  { label: "Primary 3", value: "Primary 3" },
+  { label: "Primary 4", value: "Primary 4" },
+  { label: "Primary 5", value: "Primary 5" },
+  { label: "Primary 6", value: "Primary 6" },
+];
+
+const secondaryClassOptions = [
+  { label: "JSS1", value: "JSS1" },
+  { label: "JSS2", value: "JSS2" },
+  { label: "JSS3", value: "JSS3" },
+  { label: "SS1", value: "SS1" },
+  { label: "SS2", value: "SS2" },
+  { label: "SS3", value: "SS3" },
 ];
 
 const formatMoney = (amount) =>
@@ -76,9 +84,9 @@ const normalizeClass = (value) => {
     .toUpperCase()
     .replace(/\s+/g, "");
 
-  // Make SSS1 equivalent to SS1, SSS2 to SS2, etc.
   return className.replace(/^SSS([123])$/, "SS$1");
 };
+
 const isExamClass = (className) =>
   ["JSS3", "SS3"].includes(normalizeClass(className));
 
@@ -89,6 +97,9 @@ export default function SchoolFees() {
   const [success, setSuccess] = useState("");
 
   const [schoolId, setSchoolId] = useState("");
+  const [schoolType, setSchoolType] = useState("secondary");
+  const [schoolClasses, setSchoolClasses] = useState([]);
+
   const [students, setStudents] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -99,6 +110,40 @@ export default function SchoolFees() {
 
   const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
   const [paymentForm, setPaymentForm] = useState(initialPaymentForm);
+
+  // Build class options based on the school's registered type.
+  const availableClassGroups = useMemo(() => {
+    const groups = [];
+
+    const hasPrimary = ["primary", "both"].includes(schoolType);
+    const hasSecondary = ["secondary", "both"].includes(schoolType);
+
+    if (hasPrimary) {
+      if (schoolClasses.length > 0) {
+        groups.push({
+          label: "Nursery",
+          classes: schoolClasses.map((item) => ({
+            label: item.class_name,
+            value: item.class_name,
+          })),
+        });
+      }
+
+      groups.push({
+        label: "Primary",
+        classes: primaryClassOptions,
+      });
+    }
+
+    if (hasSecondary) {
+      groups.push({
+        label: "Secondary",
+        classes: secondaryClassOptions,
+      });
+    }
+
+    return groups;
+  }, [schoolType, schoolClasses]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -139,10 +184,17 @@ export default function SchoolFees() {
       setSchoolId(profile.school_id);
 
       const [
+        { data: school, error: schoolError },
         { data: studentRows, error: studentsError },
         { data: invoiceRows, error: invoicesError },
         { data: paymentRows, error: paymentsError },
       ] = await Promise.all([
+        supabase
+          .from("schools")
+          .select("school_type")
+          .eq("id", profile.school_id)
+          .single(),
+
         supabase
           .from("students")
           .select("*")
@@ -162,9 +214,31 @@ export default function SchoolFees() {
           .order("payment_date", { ascending: false }),
       ]);
 
+      if (schoolError) throw schoolError;
       if (studentsError) throw studentsError;
       if (invoicesError) throw invoicesError;
       if (paymentsError) throw paymentsError;
+
+      const currentSchoolType = school?.school_type || "secondary";
+
+      setSchoolType(currentSchoolType);
+
+      // Load the nursery classes configured by this school.
+      if (["primary", "both"].includes(currentSchoolType)) {
+        const { data: classRows, error: classesError } = await supabase
+          .from("school_classes")
+          .select("id, class_name, section, is_active, created_at")
+          .eq("school_id", profile.school_id)
+          .eq("section", "nursery")
+          .eq("is_active", true)
+          .order("created_at", { ascending: true });
+
+        if (classesError) throw classesError;
+
+        setSchoolClasses(classRows || []);
+      } else {
+        setSchoolClasses([]);
+      }
 
       setStudents(studentRows || []);
       setInvoices(invoiceRows || []);
@@ -711,7 +785,7 @@ export default function SchoolFees() {
                           </p>
                         </td>
                         <td className="px-5 py-4 capitalize text-slate-600">
-                          {payment.payment_method.replaceAll("_", " ")}
+                          {(payment.payment_method || "other").replaceAll("_", " ")}
                         </td>
                         <td className="px-5 py-4 text-slate-500">
                           {payment.reference_number || "—"}
@@ -744,24 +818,27 @@ export default function SchoolFees() {
                       ...current,
                       class_name: event.target.value,
                       student_id: "",
-                      fee_name: isExamClass(event.target.value)
-                        ? current.fee_name
-                        : current.fee_name,
                     }))
                   }
                   className={inputClass}
                 >
                   <option value="">Select a class</option>
-                  <optgroup label="Junior Secondary">
-                    <option value="JSS1">JSS1</option>
-                    <option value="JSS2">JSS2</option>
-                    <option value="JSS3">JSS3 — external examinations</option>
-                  </optgroup>
-                  <optgroup label="Senior Secondary">
-                    <option value="SS1">SS1</option>
-                    <option value="SS2">SS2</option>
-                    <option value="SS3">SS3 — external examinations</option>
-                  </optgroup>
+
+                  {availableClassGroups.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.classes.map((classItem) => (
+                        <option
+                          key={classItem.value}
+                          value={classItem.value}
+                        >
+                          {classItem.label}
+                          {isExamClass(classItem.value)
+                            ? " — external examinations"
+                            : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </select>
               </Field>
 
@@ -841,6 +918,7 @@ export default function SchoolFees() {
                       Normal school charges
                     </span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() =>

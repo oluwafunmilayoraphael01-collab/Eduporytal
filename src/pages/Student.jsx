@@ -31,6 +31,24 @@ const emptyForm = {
   password: "",
 };
 
+const primaryClasses = [
+  "Primary 1",
+  "Primary 2",
+  "Primary 3",
+  "Primary 4",
+  "Primary 5",
+  "Primary 6",
+];
+
+const secondaryClasses = [
+  "JSS 1",
+  "JSS 2",
+  "JSS 3",
+  "SSS 1",
+  "SSS 2",
+  "SSS 3",
+];
+
 function Student() {
   const { profile } = useAuth();
 
@@ -47,9 +65,97 @@ function Student() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const inputClass =
-    "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+  // School branding
+  const [branding, setBranding] = useState({
+    logo_url: "",
+    primary_color: "#2563eb",
+  });
 
+  const [schoolName, setSchoolName] = useState("");
+
+  // School type and Nursery classes
+  const [schoolType, setSchoolType] = useState(null);
+  const [nurseryClasses, setNurseryClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(true);
+
+  const primaryColor = branding.primary_color || "#2563eb";
+
+  // Available classes depend on the school's registered type
+  const availableClasses = [
+    ...(schoolType === "primary" || schoolType === "both"
+      ? nurseryClasses.map((item) => item.class_name)
+      : []),
+
+    ...(schoolType === "primary" || schoolType === "both"
+      ? primaryClasses
+      : []),
+
+    ...(schoolType === "secondary" || schoolType === "both"
+      ? secondaryClasses
+      : []),
+  ];
+
+  // Load school information and Nursery classes
+  useEffect(() => {
+    async function loadSchoolInformation() {
+      if (!profile?.school_id) {
+        setClassesLoading(false);
+        return;
+      }
+
+      setClassesLoading(true);
+      setNurseryClasses([]);
+
+      try {
+        const { data: schoolData, error: schoolError } = await supabase
+          .from("schools")
+          .select("name, logo_url, primary_color, school_type")
+          .eq("id", profile.school_id)
+          .single();
+
+        if (schoolError) throw schoolError;
+
+        setSchoolName(schoolData.name || "");
+        setSchoolType(schoolData.school_type || null);
+
+        setBranding({
+          logo_url: schoolData.logo_url || "",
+          primary_color: schoolData.primary_color || "#2563eb",
+        });
+
+        if (
+          schoolData.school_type === "primary" ||
+          schoolData.school_type === "both"
+        ) {
+          const { data: classData, error: classError } = await supabase
+            .from("school_classes")
+            .select("id, class_name")
+            .eq("school_id", profile.school_id)
+            .eq("section", "nursery")
+            .eq("is_active", true)
+            .order("created_at", { ascending: true });
+
+          if (classError) throw classError;
+
+          setNurseryClasses(classData || []);
+        } else {
+          setNurseryClasses([]);
+        }
+      } catch (err) {
+        console.error("Could not load school information:", err);
+        setError(err.message || "Could not load school information.");
+      } finally {
+        setClassesLoading(false);
+      }
+    }
+
+    loadSchoolInformation();
+  }, [profile?.school_id]);
+
+  const inputClass =
+    "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition";
+
+  // Load students and graduation records
   const loadStudents = useCallback(async () => {
     if (!supabase || !profile?.school_id) {
       setStudents([]);
@@ -146,6 +252,23 @@ function Student() {
 
     if (!profile?.school_id) {
       setError("Your account is not assigned to a school.");
+      return;
+    }
+
+    if (classesLoading) {
+      setError("Please wait while school classes are loading.");
+      return;
+    }
+
+    if (!schoolType) {
+      setError(
+        "Your school's type has not been configured. Contact the platform administrator."
+      );
+      return;
+    }
+
+    if (!availableClasses.includes(form.class_name)) {
+      setError("Please select a valid class for your school.");
       return;
     }
 
@@ -312,8 +435,7 @@ function Student() {
 
   const filteredStudents = students.filter((student) => {
     const matchesStatus =
-      selectedStatus === "all" ||
-      student.status === selectedStatus;
+      selectedStatus === "all" || student.status === selectedStatus;
 
     const matchesSearch = [
       student.first_name,
@@ -349,7 +471,7 @@ function Student() {
     {
       label: "All Students",
       value: statusCounts.all,
-      color: "bg-blue-50 text-blue-600",
+      color: "bg-slate-100",
       icon: Users,
       status: "all",
     },
@@ -379,13 +501,29 @@ function Student() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 text-slate-800 sm:p-6 lg:p-10">
       <div className="mx-auto max-w-7xl">
-        <Link
-          to="/school"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800"
-        >
-          <GraduationCap size={19} />
-          Back to School Dashboard
-        </Link>
+
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <Link
+            to="/school"
+            className="inline-flex items-center gap-2 text-sm font-semibold hover:opacity-80"
+            style={{ color: primaryColor }}
+          >
+            <GraduationCap size={19} />
+            Back to School Dashboard
+          </Link>
+
+          <div className="flex items-center gap-3">
+            {branding.logo_url && (
+              <img
+                src={branding.logo_url}
+                alt="School logo"
+                className="h-11 w-11 rounded-xl border border-slate-200 object-contain bg-white"
+              />
+            )}
+            <span className="font-bold text-slate-700">{schoolName}</span>
+          </div>
+        </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -401,7 +539,8 @@ function Student() {
           <button
             type="button"
             onClick={openAddForm}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+            style={{ backgroundColor: primaryColor }}
           >
             <Plus size={19} />
             Add Student
@@ -433,6 +572,7 @@ function Student() {
           </div>
         )}
 
+        {/* Statistics */}
         <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map((stat) => {
             const Icon = stat.icon;
@@ -444,9 +584,17 @@ function Student() {
                 onClick={() => setSelectedStatus(stat.status)}
                 className={`flex items-center gap-4 rounded-2xl border bg-white p-5 text-left transition hover:shadow-md ${
                   selectedStatus === stat.status
-                    ? "border-blue-500 ring-2 ring-blue-100"
+                    ? "border-2"
                     : "border-slate-200"
                 }`}
+                style={
+                  selectedStatus === stat.status
+                    ? {
+                        borderColor: primaryColor,
+                        boxShadow: `0 0 0 2px ${primaryColor}20`,
+                      }
+                    : undefined
+                }
               >
                 <div className={`rounded-xl p-3 ${stat.color}`}>
                   <Icon size={25} />
@@ -463,6 +611,7 @@ function Student() {
           })}
         </div>
 
+        {/* Student Directory */}
         <section className="mt-7 overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="border-b border-slate-100 p-5">
             <div className="flex flex-col gap-4">
@@ -482,9 +631,14 @@ function Student() {
                     onClick={() => setSelectedStatus(tab.value)}
                     className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
                       selectedStatus === tab.value
-                        ? "bg-blue-600 text-white"
+                        ? "text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
+                    style={
+                      selectedStatus === tab.value
+                        ? { backgroundColor: primaryColor }
+                        : undefined
+                    }
                   >
                     {tab.label} ({statusCounts[tab.value]})
                   </button>
@@ -502,7 +656,10 @@ function Student() {
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search students..."
-                    className={`${inputClass} pl-10`}
+                    className={`${inputClass} pl-10 focus:ring-2`}
+                    style={{
+                      "--tw-ring-color": `${primaryColor}30`,
+                    }}
                   />
                 </div>
 
@@ -517,6 +674,7 @@ function Student() {
                   <RefreshCw
                     size={18}
                     className={loading ? "animate-spin" : ""}
+                    style={{ color: primaryColor }}
                   />
                 </button>
               </div>
@@ -526,7 +684,8 @@ function Student() {
           {loading ? (
             <div className="p-12 text-center">
               <RefreshCw
-                className="mx-auto animate-spin text-blue-600"
+                className="mx-auto animate-spin"
+                style={{ color: primaryColor }}
                 size={30}
               />
               <p className="mt-3 text-sm text-slate-500">
@@ -557,7 +716,8 @@ function Student() {
                 <button
                   type="button"
                   onClick={openAddForm}
-                  className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                  className="mt-5 rounded-xl px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+                  style={{ backgroundColor: primaryColor }}
                 >
                   Register First Student
                 </button>
@@ -634,7 +794,8 @@ function Student() {
                                 type="button"
                                 onClick={() => openEditForm(student)}
                                 title="Edit student"
-                                className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                                className="rounded-lg p-2 hover:bg-slate-100"
+                                style={{ color: primaryColor }}
                               >
                                 <Pencil size={17} />
                               </button>
@@ -663,6 +824,7 @@ function Student() {
           )}
         </section>
 
+        {/* Graduation Records */}
         {selectedStatus === "graduated" && (
           <section className="mt-7 rounded-2xl border border-purple-100 bg-purple-50 p-5">
             <div className="flex items-center gap-3">
@@ -680,6 +842,7 @@ function Student() {
           </section>
         )}
 
+        {/* Student Form Modal */}
         {formOpen && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-3 py-6 sm:items-center sm:p-6">
             <div className="my-auto w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
@@ -724,7 +887,10 @@ function Student() {
                   {!editingId && (
                     <div>
                       <label className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                        <KeyRound size={16} className="text-blue-600" />
+                        <KeyRound
+                          size={16}
+                          style={{ color: primaryColor }}
+                        />
                         Initial Password *
                       </label>
                       <input
@@ -745,25 +911,81 @@ function Student() {
                     </div>
                   )}
 
+                  {/* Dynamic Class Selection */}
                   <div>
                     <label className="mb-2 block text-sm font-semibold">
                       Class *
                     </label>
+
                     <select
                       required
                       name="class_name"
                       value={form.class_name}
                       onChange={handleChange}
+                      disabled={classesLoading || !schoolType}
                       className={inputClass}
                     >
-                      <option value="">Select class</option>
-                      <option value="JSS 1">JSS 1</option>
-                      <option value="JSS 2">JSS 2</option>
-                      <option value="JSS 3">JSS 3</option>
-                      <option value="SSS 1">SSS 1</option>
-                      <option value="SSS 2">SSS 2</option>
-                      <option value="SSS 3">SSS 3</option>
+                      <option value="">
+                        {classesLoading
+                          ? "Loading classes..."
+                          : "Select class"}
+                      </option>
+
+                      {(schoolType === "primary" ||
+                        schoolType === "both") && (
+                        <>
+                          {nurseryClasses.length > 0 && (
+                            <optgroup label="Nursery">
+                              {nurseryClasses.map((item) => (
+                                <option
+                                  key={item.id}
+                                  value={item.class_name}
+                                >
+                                  {item.class_name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+
+                          <optgroup label="Primary">
+                            {primaryClasses.map((className) => (
+                              <option key={className} value={className}>
+                                {className}
+                              </option>
+                            ))}
+                          </optgroup>
+                        </>
+                      )}
+
+                      {(schoolType === "secondary" ||
+                        schoolType === "both") && (
+                        <optgroup label="Secondary">
+                          {secondaryClasses.map((className) => (
+                            <option key={className} value={className}>
+                              {className}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
+
+                    {!classesLoading && !schoolType && (
+                      <p className="mt-2 text-xs text-red-600">
+                        Your school's type has not been configured.
+                        Contact the platform administrator.
+                      </p>
+                    )}
+
+                    {!classesLoading &&
+                      (schoolType === "primary" ||
+                        schoolType === "both") &&
+                      nurseryClasses.length === 0 && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          No Nursery classes have been configured yet.
+                          Your school administrator can add them in Class
+                          Configuration.
+                        </p>
+                      )}
                   </div>
 
                   <div>
@@ -904,8 +1126,9 @@ function Student() {
 
                   <button
                     type="submit"
-                    disabled={saving}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                    disabled={saving || classesLoading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                    style={{ backgroundColor: primaryColor }}
                   >
                     {saving && (
                       <RefreshCw size={17} className="animate-spin" />

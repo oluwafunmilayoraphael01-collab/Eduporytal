@@ -21,11 +21,19 @@ function TeacherDashboard() {
   const navigate = useNavigate();
 
   const [students, setStudents] = useState([]);
+  const [schoolName, setSchoolName] = useState("EduPortal");
+  const [branding, setBranding] = useState({
+    logo_url: "",
+    primary_color: "#2563eb",
+  });
+
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
+
+  const primaryColor = branding.primary_color || "#2563eb";
 
   async function loadStudents() {
     if (!profile?.school_id) {
@@ -39,6 +47,25 @@ function TeacherDashboard() {
     setError("");
 
     try {
+      // Load school branding
+      const { data: schoolData, error: schoolError } = await supabase
+        .from("schools")
+        .select("name, logo_url, primary_color")
+        .eq("id", profile.school_id)
+        .maybeSingle();
+
+      if (schoolError) throw schoolError;
+
+      if (schoolData) {
+        setSchoolName(schoolData.name || "EduPortal");
+
+        setBranding({
+          logo_url: schoolData.logo_url || "",
+          primary_color: schoolData.primary_color || "#2563eb",
+        });
+      }
+
+      // Load students
       const { data, error: fetchError } = await supabase
         .from("students")
         .select(
@@ -52,7 +79,7 @@ function TeacherDashboard() {
 
       setStudents(data || []);
     } catch (err) {
-      console.error("Error loading students:", err);
+      console.error("Error loading teacher dashboard:", err);
       setError(err.message || "Could not load students.");
       setStudents([]);
     } finally {
@@ -138,14 +165,25 @@ function TeacherDashboard() {
       {/* Header */}
       <header className="border-b border-gray-200 bg-white px-5 py-5 sm:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-blue-600 p-3 text-white">
-              <GraduationCap size={26} />
-            </div>
+          <div className="flex min-w-0 items-center gap-3">
+            {branding.logo_url ? (
+              <img
+                src={branding.logo_url}
+                alt={`${schoolName} logo`}
+                className="h-12 w-12 shrink-0 rounded-xl border border-gray-100 object-cover"
+              />
+            ) : (
+              <div
+                className="rounded-xl p-3 text-white"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <GraduationCap size={26} />
+              </div>
+            )}
 
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                EduPortal
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold text-gray-900 sm:text-xl">
+                {schoolName}
               </h1>
               <p className="text-sm text-gray-500">
                 Teacher Dashboard
@@ -182,18 +220,21 @@ function TeacherDashboard() {
             icon={<BookOpen size={25} />}
             title="Total Classes"
             value={loading ? "..." : classes.length}
+            primaryColor={primaryColor}
           />
 
           <StatCard
             icon={<Users size={25} />}
             title="Total Students"
             value={loading ? "..." : students.length}
+            primaryColor={primaryColor}
           />
 
           <StatCard
             icon={<GraduationCap size={25} />}
             title="Active Students"
             value={loading ? "..." : activeStudents}
+            primaryColor={primaryColor}
           />
         </div>
 
@@ -257,7 +298,8 @@ function TeacherDashboard() {
                   ? "Search students..."
                   : "Search classes..."
               }
-              className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none focus:ring-2"
+              style={{ "--tw-ring-color": primaryColor }}
             />
           </div>
 
@@ -362,16 +404,33 @@ function TeacherDashboard() {
                     setSelectedClass(item.name);
                     setSearch("");
                   }}
-                  className="group rounded-xl border border-gray-200 p-5 text-left transition hover:border-blue-300 hover:bg-blue-50/40"
+                  className="group rounded-xl border border-gray-200 p-5 text-left transition hover:bg-gray-50"
+                  style={{
+                    "--tw-ring-color": primaryColor,
+                  }}
+                  onMouseEnter={(event) => {
+                    event.currentTarget.style.borderColor = primaryColor;
+                    event.currentTarget.style.backgroundColor = `${primaryColor}0d`;
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.style.borderColor = "";
+                    event.currentTarget.style.backgroundColor = "";
+                  }}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="rounded-xl bg-blue-100 p-3 text-blue-700">
+                    <div
+                      className="rounded-xl p-3"
+                      style={{
+                        backgroundColor: `${primaryColor}18`,
+                        color: primaryColor,
+                      }}
+                    >
                       <BookOpen size={24} />
                     </div>
 
                     <ChevronRight
                       size={20}
-                      className="text-gray-400 group-hover:text-blue-600"
+                      style={{ color: primaryColor }}
                     />
                   </div>
 
@@ -384,7 +443,10 @@ function TeacherDashboard() {
                     {item.students.length === 1 ? "student" : "students"}
                   </p>
 
-                  <span className="mt-4 inline-block text-sm font-semibold text-blue-600">
+                  <span
+                    className="mt-4 inline-block text-sm font-semibold"
+                    style={{ color: primaryColor }}
+                  >
                     View students →
                   </span>
                 </button>
@@ -400,6 +462,7 @@ function TeacherDashboard() {
             title="Attendance"
             description="Mark daily attendance, record absences and lateness, and review attendance records."
             onClick={() => navigate("/school/attendance")}
+            primaryColor={primaryColor}
           />
 
           <FeatureCard
@@ -407,6 +470,7 @@ function TeacherDashboard() {
             title="Student Results"
             description="Enter CA scores out of 40 and exam scores out of 60, calculate grades, save results, and publish them."
             onClick={() => navigate("/teacher/results")}
+            primaryColor={primaryColor}
           />
         </div>
       </section>
@@ -414,11 +478,17 @@ function TeacherDashboard() {
   );
 }
 
-function StatCard({ icon, title, value }) {
+function StatCard({ icon, title, value, primaryColor }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-4">
-        <div className="rounded-xl bg-blue-100 p-3 text-blue-700">
+        <div
+          className="rounded-xl p-3"
+          style={{
+            backgroundColor: `${primaryColor}18`,
+            color: primaryColor,
+          }}
+        >
           {icon}
         </div>
 
@@ -433,15 +503,36 @@ function StatCard({ icon, title, value }) {
   );
 }
 
-function FeatureCard({ icon, title, description, onClick }) {
+function FeatureCard({
+  icon,
+  title,
+  description,
+  onClick,
+  primaryColor,
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="w-full rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2"
+      style={{ "--tw-ring-color": primaryColor }}
+      onMouseEnter={(event) => {
+        event.currentTarget.style.borderColor = primaryColor;
+        event.currentTarget.style.backgroundColor = `${primaryColor}0d`;
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.borderColor = "";
+        event.currentTarget.style.backgroundColor = "";
+      }}
     >
       <div className="flex items-center gap-3">
-        <div className="rounded-xl bg-blue-100 p-3 text-blue-700">
+        <div
+          className="rounded-xl p-3"
+          style={{
+            backgroundColor: `${primaryColor}18`,
+            color: primaryColor,
+          }}
+        >
           {icon}
         </div>
 
@@ -452,7 +543,10 @@ function FeatureCard({ icon, title, description, onClick }) {
         {description}
       </p>
 
-      <span className="mt-4 inline-block text-sm font-semibold text-blue-600">
+      <span
+        className="mt-4 inline-block text-sm font-semibold"
+        style={{ color: primaryColor }}
+      >
         Open feature →
       </span>
     </button>

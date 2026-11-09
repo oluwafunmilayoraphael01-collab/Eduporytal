@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Users,
@@ -15,11 +16,34 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/superbase";
 
+const PRIMARY_CLASSES = [
+  "Primary 1",
+  "Primary 2",
+  "Primary 3",
+  "Primary 4",
+  "Primary 5",
+  "Primary 6",
+];
+
+const SECONDARY_CLASSES = [
+  "JSS 1",
+  "JSS 2",
+  "JSS 3",
+  "SSS 1",
+  "SSS 2",
+  "SSS 3",
+];
+
+const TERMS = ["First Term", "Second Term", "Third Term"];
+
+const normalizeClass = (value) =>
+  (value || "").trim().replace(/\s+/g, "").toUpperCase();
+
 function StudentPromotion() {
   const { profile } = useAuth();
 
   const [academicSession, setAcademicSession] = useState("2026/2027");
-  const [selectedClass, setSelectedClass] = useState("JSS 1");
+  const [selectedClass, setSelectedClass] = useState("");
   const [activeTab, setActiveTab] = useState("All Students");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStudents, setSelectedStudents] = useState([]);
@@ -27,6 +51,10 @@ function StudentPromotion() {
   const [students, setStudents] = useState([]);
   const [studentAverages, setStudentAverages] = useState({});
   const [decisions, setDecisions] = useState([]);
+
+  const [schoolType, setSchoolType] = useState(null);
+  const [nurseryClasses, setNurseryClasses] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [resultsError, setResultsError] = useState("");
@@ -37,22 +65,23 @@ function StudentPromotion() {
   const [actionError, setActionError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const classes = ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"];
-  const terms = ["First Term", "Second Term", "Third Term"];
+  // Build the classes available to this school
+  const classes = useMemo(() => {
+    const available = [];
 
-  // Determine the next class
-  const getNextClass = (currentClass) => {
-    const progression = {
-      "JSS 1": "JSS 2",
-      "JSS 2": "JSS 3",
-      "JSS 3": "SSS 1",
-      "SSS 1": "SSS 2",
-      "SSS 2": "SSS 3",
-      "SSS 3": "Graduated",
-    };
+    if (schoolType === "primary" || schoolType === "both") {
+      available.push(
+        ...nurseryClasses.map((item) => item.class_name),
+        ...PRIMARY_CLASSES
+      );
+    }
 
-    return progression[currentClass] || "Unknown";
-  };
+    if (schoolType === "secondary" || schoolType === "both") {
+      available.push(...SECONDARY_CLASSES);
+    }
+
+    return available;
+  }, [schoolType, nurseryClasses]);
 
   // Get student's full name
   const getStudentName = (student) =>
@@ -60,7 +89,48 @@ function StudentPromotion() {
       .filter(Boolean)
       .join(" ");
 
-  // Load students, results and promotion history
+  // Determine the next class
+  const getNextClass = useCallback(
+    (currentClass) => {
+      const normalized = normalizeClass(currentClass);
+
+      // Nursery progression follows each school's configured order
+      const nurseryIndex = nurseryClasses.findIndex(
+        (item) => normalizeClass(item.class_name) === normalized
+      );
+
+      if (nurseryIndex !== -1) {
+        if (nurseryIndex < nurseryClasses.length - 1) {
+          return nurseryClasses[nurseryIndex + 1].class_name;
+        }
+
+        return "Primary 1";
+      }
+
+      // Primary progression
+      const primaryIndex = PRIMARY_CLASSES.findIndex(
+        (item) => normalizeClass(item) === normalized
+      );
+
+      if (primaryIndex !== -1) {
+        return PRIMARY_CLASSES[primaryIndex + 1] || "Graduated";
+      }
+
+      // Secondary progression
+      const secondaryIndex = SECONDARY_CLASSES.findIndex(
+        (item) => normalizeClass(item) === normalized
+      );
+
+      if (secondaryIndex !== -1) {
+        return SECONDARY_CLASSES[secondaryIndex + 1] || "Graduated";
+      }
+
+      return "Unknown";
+    },
+    [nurseryClasses]
+  );
+
+  // Load students, school configuration, results and promotion history
   const loadStudents = useCallback(async () => {
     if (!profile?.school_id) {
       setError("Your account is not assigned to a school.");
@@ -74,7 +144,46 @@ function StudentPromotion() {
     setStudentAverages({});
 
     try {
-      // 1. Fetch students belonging to this school
+      // 1. Fetch school configuration
+      const { data: schoolData, error: schoolError } = await supabase
+        .from("schools")
+        .select("school_type")
+        .eq("id", profile.school_id)
+        .single();
+
+      if (schoolError) throw schoolError;
+
+      if (!schoolData?.school_type) {
+        throw new Error(
+          "Your school type has not been configured. Please contact the platform administrator."
+        );
+      }
+
+      setSchoolType(schoolData.school_type);
+
+      // 2. Fetch configured nursery classes
+      if (
+        schoolData.school_type === "primary" ||
+        schoolData.school_type === "both"
+      ) {
+        const { data: nurseryData, error: nurseryError } = await supabase
+          .from("school_classes")
+          .select("id, class_name, section, created_at, is_active")
+          .eq("school_id", profile.school_id)
+          .eq("section", "nursery")
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true });
+
+        if (nurseryError) throw nurseryError;
+
+        // Include inactive classes in the progression sequence so
+        // existing students in those classes are not skipped.
+        setNurseryClasses(nurseryData || []);
+      } else {
+        setNurseryClasses([]);
+      }
+
+      // 3. Fetch students belonging to this school
       const { data: studentData, error: studentsError } = await supabase
         .from("students")
         .select(
@@ -88,7 +197,7 @@ function StudentPromotion() {
       const studentList = studentData || [];
       setStudents(studentList);
 
-      // 2. Fetch executed AND reversed decisions for this session
+      // 4. Fetch executed AND reversed decisions
       const { data: decisionData, error: decisionsError } = await supabase
         .from("student_promotion_decisions")
         .select(
@@ -114,9 +223,10 @@ function StudentPromotion() {
           .filter((decision) => decision.student)
       );
 
-      // 3. Fetch published results for active students
+      // 5. Fetch published results for active students
       const activeStudentList = studentList.filter(
-        (student) => (student.status || "active").toLowerCase() === "active"
+        (student) =>
+          (student.status || "active").toLowerCase() === "active"
       );
 
       if (activeStudentList.length === 0) {
@@ -132,7 +242,7 @@ function StudentPromotion() {
         .eq("school_id", profile.school_id)
         .eq("academic_session", academicSession)
         .eq("is_published", true)
-        .in("term", terms)
+        .in("term", TERMS)
         .in("student_id", studentIds);
 
       if (resultsQueryError) {
@@ -140,7 +250,7 @@ function StudentPromotion() {
         return;
       }
 
-      // 4. Group results by student
+      // 6. Group results by student
       const groupedResults = {};
 
       (results || []).forEach((result) => {
@@ -169,7 +279,7 @@ function StudentPromotion() {
         }
       });
 
-      // 5. Calculate overall average
+      // 7. Calculate overall average
       const averages = {};
 
       Object.entries(groupedResults).forEach(([studentId, result]) => {
@@ -196,11 +306,28 @@ function StudentPromotion() {
     loadStudents();
   }, [loadStudents]);
 
+  // Set a valid default class when school classes load
+  useEffect(() => {
+    if (classes.length === 0) {
+      setSelectedClass("");
+      return;
+    }
+
+    const selectedStillExists = classes.some(
+      (className) => normalizeClass(className) === normalizeClass(selectedClass)
+    );
+
+    if (!selectedStillExists) {
+      setSelectedClass(classes[0]);
+    }
+  }, [classes, selectedClass]);
+
   // Only active students can be processed
   const activeStudents = useMemo(
     () =>
       students.filter(
-        (student) => (student.status || "active").toLowerCase() === "active"
+        (student) =>
+          (student.status || "active").toLowerCase() === "active"
       ),
     [students]
   );
@@ -250,8 +377,7 @@ function StudentPromotion() {
 
     return activeStudents.filter((student) => {
       const matchesClass =
-        student.class_name?.trim().replace(/\s+/g, "").toUpperCase() ===
-        selectedClass.trim().replace(/\s+/g, "").toUpperCase();
+        normalizeClass(student.class_name) === normalizeClass(selectedClass);
 
       const matchesSearch =
         getStudentName(student).toLowerCase().includes(search) ||
@@ -347,7 +473,9 @@ function StudentPromotion() {
       await loadStudents();
     } catch (err) {
       console.error("Promotion decision error:", err);
-      setActionError(err.message || "Unable to save the promotion decision.");
+      setActionError(
+        err.message || "Unable to save the promotion decision."
+      );
     } finally {
       setProcessing(false);
     }
@@ -447,6 +575,14 @@ function StudentPromotion() {
         </div>
       )}
 
+      {/* Error message */}
+      {error && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+          <AlertTriangle size={20} className="mt-0.5 shrink-0" />
+          <p className="text-sm">{error}</p>
+        </div>
+      )}
+
       {/* Statistics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border bg-white p-5">
@@ -485,7 +621,9 @@ function StudentPromotion() {
 
             <div>
               <p className="text-sm text-slate-500">Current Class</p>
-              <h2 className="text-2xl font-bold">{selectedClass}</h2>
+              <h2 className="text-2xl font-bold">
+                {selectedClass || "—"}
+              </h2>
             </div>
           </div>
         </div>
@@ -526,17 +664,36 @@ function StudentPromotion() {
                 setSelectedClass(e.target.value);
                 setSelectedStudents([]);
               }}
-              disabled={activeTab !== "All Students"}
+              disabled={
+                activeTab !== "All Students" ||
+                loading ||
+                classes.length === 0
+              }
               className="w-full rounded-lg border px-4 py-3 disabled:bg-slate-100"
             >
-              {classes.map((className) => (
-                <option key={className} value={className}>
-                  {className}
-                </option>
-              ))}
+              {classes.length === 0 ? (
+                <option value="">No classes configured</option>
+              ) : (
+                classes.map((className) => (
+                  <option key={className} value={className}>
+                    {className}
+                  </option>
+                ))
+              )}
             </select>
           </div>
         </div>
+
+        {schoolType && (
+          <p className="mt-3 text-xs text-slate-500">
+            School type:{" "}
+            {schoolType === "both"
+              ? "Primary and Secondary"
+              : schoolType === "primary"
+                ? "Primary School"
+                : "Secondary School"}
+          </p>
+        )}
       </div>
 
       {/* Student records */}
@@ -631,7 +788,11 @@ function StudentPromotion() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleDecision("promoted")}
-                disabled={loading || processing}
+                disabled={
+                  loading ||
+                  processing ||
+                  selectedStudents.length === 0
+                }
                 className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 <ArrowUpRight size={17} />
@@ -640,7 +801,11 @@ function StudentPromotion() {
 
               <button
                 onClick={() => handleDecision("repeated")}
-                disabled={loading || processing}
+                disabled={
+                  loading ||
+                  processing ||
+                  selectedStudents.length === 0
+                }
                 className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 <RefreshCw size={17} />
@@ -700,7 +865,6 @@ function StudentPromotion() {
                       className="mx-auto animate-spin text-blue-600"
                       size={25}
                     />
-
                     <p className="mt-3 text-slate-500">Loading records...</p>
                   </td>
                 </tr>
@@ -813,7 +977,7 @@ function StudentPromotion() {
                           {isReversed
                             ? "Original decision reversed"
                             : isGraduated
-                              ? "Graduated (SSS 3)"
+                              ? `Graduated (${item.from_class})`
                               : item.to_class || item.from_class}
                         </td>
 
@@ -848,7 +1012,9 @@ function StudentPromotion() {
                     className="px-5 py-12 text-center text-slate-500"
                   >
                     {activeTab === "All Students"
-                      ? `No active students found in ${selectedClass}.`
+                      ? selectedClass
+                        ? `No active students found in ${selectedClass}.`
+                        : "No classes are available for this school."
                       : `No ${activeTab.toLowerCase()} decisions found for ${academicSession}.`}
                   </td>
                 </tr>
@@ -894,8 +1060,8 @@ function StudentPromotion() {
                 <AlertTriangle size={20} className="mt-0.5 shrink-0" />
 
                 <p className="text-sm">
-                  Review these students carefully. Confirming will update their
-                  school records.
+                  Review these students carefully. Confirming will update
+                  their school records.
                 </p>
               </div>
 
@@ -918,7 +1084,7 @@ function StudentPromotion() {
 
                   const isGraduating =
                     pendingDecision === "promoted" &&
-                    student.class_name === "SSS 3";
+                    nextClass === "Graduated";
 
                   return (
                     <div
@@ -977,7 +1143,10 @@ function StudentPromotion() {
 
               <button
                 onClick={confirmDecision}
-                disabled={processing || selectedStudentRecords.length === 0}
+                disabled={
+                  processing ||
+                  selectedStudentRecords.length === 0
+                }
                 className={`flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50 ${
                   pendingDecision === "promoted"
                     ? "bg-green-600 hover:bg-green-700"
@@ -1047,7 +1216,7 @@ function StudentPromotion() {
                 <div className="mt-4 flex items-center gap-2 text-sm">
                   <span className="rounded-md bg-slate-100 px-3 py-2">
                     {pendingReversal.decision === "graduated"
-                      ? "Graduated (SSS 3)"
+                      ? `Graduated (${pendingReversal.from_class})`
                       : pendingReversal.to_class}
                   </span>
 
@@ -1078,7 +1247,7 @@ function StudentPromotion() {
               <button
                 onClick={confirmReversal}
                 disabled={processing}
-                className="flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-5 py-2.5 text-sm font-medium text-red hover:bg-orange-700 disabled:opacity-50"
+                className="flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
               >
                 {processing ? (
                   <>
@@ -1088,7 +1257,7 @@ function StudentPromotion() {
                 ) : (
                   <>
                     <RotateCcw size={17} />
-                     Confirm Repeat Instead
+                    Confirm Repeat Instead
                   </>
                 )}
               </button>

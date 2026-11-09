@@ -8,12 +8,16 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  School,
+  BookOpen,
+  Layers,
 } from "lucide-react";
 import { supabase } from "../lib/superbase";
 
 function RegisterSchool() {
   const [form, setForm] = useState({
     school_name: "",
+    school_type: "",
     contact_name: "",
     email: "",
     phone: "",
@@ -47,6 +51,11 @@ function RegisterSchool() {
       return;
     }
 
+    if (!form.school_type) {
+      setMessage("Please select your school type.");
+      return;
+    }
+
     if (form.password.length < 8) {
       setMessage("Your password must contain at least 8 characters.");
       return;
@@ -62,7 +71,6 @@ function RegisterSchool() {
     try {
       const email = form.email.trim().toLowerCase();
 
-      // Create the school administrator's Supabase Auth account.
       const { data, error: signUpError } =
         await supabase.auth.signUp({
           email,
@@ -80,8 +88,6 @@ function RegisterSchool() {
         throw new Error("Account creation failed. Please try again.");
       }
 
-      // The application insert requires an authenticated session.
-      // If email confirmation is enabled, Supabase may not return one yet.
       if (!data.session) {
         setSuccess(true);
         setMessage(
@@ -90,12 +96,13 @@ function RegisterSchool() {
         return;
       }
 
-      // Submit the school application after account creation.
+      // Submit school application
       const { error: applicationError } = await supabase
         .from("school_applications")
         .insert({
           applicant_user_id: data.user.id,
           school_name: form.school_name.trim(),
+          school_type: form.school_type,
           contact_name: form.contact_name.trim(),
           email,
           phone: form.phone.trim(),
@@ -116,6 +123,7 @@ function RegisterSchool() {
 
       setForm({
         school_name: "",
+        school_type: "",
         contact_name: "",
         email: "",
         phone: "",
@@ -134,6 +142,27 @@ function RegisterSchool() {
 
   const inputClass =
     "w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+  const schoolTypes = [
+    {
+      value: "primary",
+      title: "Primary School",
+      description: "Nursery (optional) and Primary 1–6",
+      icon: BookOpen,
+    },
+    {
+      value: "secondary",
+      title: "Secondary School",
+      description: "JSS1–JSS3 and SS1–SS3",
+      icon: School,
+    },
+    {
+      value: "both",
+      title: "Both",
+      description: "Nursery, Primary and Secondary",
+      icon: Layers,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-12">
@@ -176,10 +205,12 @@ function RegisterSchool() {
           )}
 
           <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+            {/* School Name */}
             <div>
               <label className="mb-2 block text-sm font-semibold">
                 School Name
               </label>
+
               <input
                 name="school_name"
                 value={form.school_name}
@@ -190,10 +221,94 @@ function RegisterSchool() {
               />
             </div>
 
+            {/* School Type */}
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                What type of school are you registering?
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {schoolTypes.map((type) => {
+                  const Icon = type.icon;
+                  const selected = form.school_type === type.value;
+
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() =>
+                        setForm((previous) => ({
+                          ...previous,
+                          school_type: type.value,
+                        }))
+                      }
+                      aria-pressed={selected}
+                      className={`rounded-xl border-2 p-4 text-left transition ${
+                        selected
+                          ? "border-blue-600 bg-blue-50"
+                          : "border-slate-200 hover:border-blue-300"
+                      }`}
+                    >
+                      <Icon
+                        size={25}
+                        className={
+                          selected ? "text-blue-600" : "text-slate-500"
+                        }
+                      />
+
+                      <p className="mt-3 text-sm font-bold text-slate-900">
+                        {type.title}
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        {type.description}
+                      </p>
+
+                      {selected && (
+                        <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
+                          <CheckCircle size={14} />
+                          Selected
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {!form.school_type && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Select the section or sections your school operates.
+                </p>
+              )}
+
+              {form.school_type === "primary" && (
+                <p className="mt-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
+                  Your school will have access to primary classes. You
+                  can configure your nursery classes separately.
+                </p>
+              )}
+
+              {form.school_type === "secondary" && (
+                <p className="mt-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
+                  Your school will have access to JSS1–JSS3 and SS1–SS3.
+                </p>
+              )}
+
+              {form.school_type === "both" && (
+                <p className="mt-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
+                  Your school will have access to nursery, primary and
+                  secondary sections. You can configure nursery classes
+                  separately.
+                </p>
+              )}
+            </div>
+
+            {/* Administrator */}
             <div>
               <label className="mb-2 block text-sm font-semibold">
                 Administrator's Full Name
               </label>
+
               <input
                 name="contact_name"
                 value={form.contact_name}
@@ -205,10 +320,12 @@ function RegisterSchool() {
               />
             </div>
 
+            {/* Email */}
             <div>
               <label className="mb-2 block text-sm font-semibold">
                 Email Address
               </label>
+
               <input
                 type="email"
                 name="email"
@@ -221,10 +338,12 @@ function RegisterSchool() {
               />
             </div>
 
+            {/* Phone */}
             <div>
               <label className="mb-2 block text-sm font-semibold">
                 Phone Number
               </label>
+
               <input
                 type="tel"
                 name="phone"
@@ -237,10 +356,12 @@ function RegisterSchool() {
               />
             </div>
 
+            {/* Address */}
             <div>
               <label className="mb-2 block text-sm font-semibold">
                 School Address
               </label>
+
               <textarea
                 name="address"
                 value={form.address}
@@ -252,10 +373,12 @@ function RegisterSchool() {
               />
             </div>
 
+            {/* Password */}
             <div>
               <label className="mb-2 block text-sm font-semibold">
                 Create Password
               </label>
+
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -268,6 +391,7 @@ function RegisterSchool() {
                   placeholder="At least 8 characters"
                   className={`${inputClass} pr-12`}
                 />
+
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -279,10 +403,12 @@ function RegisterSchool() {
               </div>
             </div>
 
+            {/* Confirm Password */}
             <div>
               <label className="mb-2 block text-sm font-semibold">
                 Confirm Password
               </label>
+
               <div className="relative">
                 <input
                   type={showConfirmPassword ? "text" : "password"}
@@ -295,6 +421,7 @@ function RegisterSchool() {
                   placeholder="Enter your password again"
                   className={`${inputClass} pr-12`}
                 />
+
                 <button
                   type="button"
                   onClick={() =>

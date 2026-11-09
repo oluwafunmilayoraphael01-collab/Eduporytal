@@ -9,6 +9,7 @@ import {
   Search,
 } from "lucide-react";
 import { supabase } from "../lib/superbase";
+
 function SchoolApplications() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,7 @@ function SchoolApplications() {
     const { data, error: fetchError } = await supabase
       .from("school_applications")
       .select(
-        "id, school_name, contact_name, email, phone, address, status, created_at"
+        "id, school_name, school_type, contact_name, email, phone, address, status, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -42,7 +43,8 @@ function SchoolApplications() {
   useEffect(() => {
     loadApplications();
   }, [loadApplications]);
-   async function reviewApplication(application, decision) {
+
+  async function reviewApplication(application, decision) {
     const action = decision === "approved" ? "approve" : "reject";
 
     const confirmed = window.confirm(
@@ -79,6 +81,7 @@ function SchoolApplications() {
       filter === "all" || application.status === filter;
 
     const term = search.toLowerCase();
+
     const matchesSearch =
       application.school_name?.toLowerCase().includes(term) ||
       application.contact_name?.toLowerCase().includes(term) ||
@@ -99,6 +102,19 @@ function SchoolApplications() {
     (item) => item.status === "rejected"
   ).length;
 
+  const getSchoolType = (type) => {
+    switch (type) {
+      case "primary":
+        return "Primary School";
+      case "secondary":
+        return "Secondary School";
+      case "both":
+        return "Primary & Secondary";
+      default:
+        return "Not specified";
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 p-5 md:p-8">
       <div className="mx-auto max-w-7xl">
@@ -107,9 +123,11 @@ function SchoolApplications() {
             <p className="text-sm font-medium text-blue-600">
               EduPortal Administration
             </p>
+
             <h1 className="mt-1 text-3xl font-bold text-slate-900">
               School Applications
             </h1>
+
             <p className="mt-2 text-slate-500">
               Review and manage schools applying to join EduPortal.
             </p>
@@ -157,6 +175,7 @@ function SchoolApplications() {
                   <p className="text-sm text-slate-500">{item.label}</p>
                   <Icon className={item.color} size={22} />
                 </div>
+
                 <p className="mt-3 text-3xl font-bold">{item.value}</p>
               </section>
             );
@@ -170,7 +189,10 @@ function SchoolApplications() {
         )}
 
         {error && (
-          <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-red-700">
+          <p
+            role="alert"
+            className="mt-5 rounded-xl bg-red-50 p-4 text-red-700"
+          >
             {error}
           </p>
         )}
@@ -182,6 +204,7 @@ function SchoolApplications() {
                 size={18}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
               />
+
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -210,9 +233,11 @@ function SchoolApplications() {
           ) : filteredApplications.length === 0 ? (
             <div className="py-16 text-center">
               <School className="mx-auto text-slate-300" size={42} />
+
               <h2 className="mt-4 font-semibold text-slate-800">
                 No applications found
               </h2>
+
               <p className="mt-2 text-sm text-slate-500">
                 Applications will appear here when schools submit them.
               </p>
@@ -229,22 +254,35 @@ function SchoolApplications() {
                       <h2 className="text-lg font-bold text-slate-900">
                         {application.school_name}
                       </h2>
-                      <p className="mt-1 text-sm text-slate-600">
+
+                      <div className="mt-2">
+                        <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                          {getSchoolType(application.school_type)}
+                        </span>
+                      </div>
+
+                      <p className="mt-3 text-sm text-slate-600">
                         Contact: {application.contact_name}
                       </p>
+
                       <p className="mt-1 break-all text-sm text-slate-600">
                         Email: {application.email}
                       </p>
+
                       <p className="mt-1 text-sm text-slate-600">
                         Phone: {application.phone}
                       </p>
+
                       <p className="mt-1 text-sm text-slate-600">
                         Address: {application.address}
                       </p>
+
                       <p className="mt-2 text-xs text-slate-400">
                         Submitted:{" "}
                         {application.created_at
-                          ? new Date(application.created_at).toLocaleDateString()
+                          ? new Date(
+                              application.created_at
+                            ).toLocaleDateString()
                           : "Date unavailable"}
                       </p>
                     </div>

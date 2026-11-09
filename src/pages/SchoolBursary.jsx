@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Wallet,
@@ -11,6 +12,7 @@ import {
   CreditCard,
   Banknote,
   X,
+  GraduationCap,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/superbase";
@@ -42,12 +44,22 @@ function SchoolBursary() {
 
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
+
   const [schoolName, setSchoolName] = useState("");
+  const [branding, setBranding] = useState({
+    logo_url: "",
+    primary_color: "#2563eb",
+  });
+
+  const primaryColor = branding.primary_color || "#2563eb";
+
   const [students, setStudents] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
+
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [search, setSearch] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -102,39 +114,22 @@ function SchoolBursary() {
       setUser(currentUser);
       setProfile(currentProfile);
 
-      // Fetch the school name using the bursar's assigned school_id.
-      let fetchedSchoolName = "";
-
-      const { data: schoolBySchoolName, error: schoolNameError } =
+      // Load school name and branding
+      const { data: schoolData, error: schoolError } =
         await supabase
           .from("schools")
-          .select("school_name")
+          .select("name, logo_url, primary_color")
           .eq("id", currentProfile.school_id)
           .maybeSingle();
 
-      if (!schoolNameError) {
-        fetchedSchoolName = schoolBySchoolName?.school_name || "";
-      } else if (
-        !schoolNameError.message?.includes("school_name")
-      ) {
-        throw schoolNameError;
-      }
+      if (schoolError) throw schoolError;
 
-      // Fallback for projects where the column is named "name".
-      if (!fetchedSchoolName) {
-        const { data: schoolByName, error: nameError } =
-          await supabase
-            .from("schools")
-            .select("name")
-            .eq("id", currentProfile.school_id)
-            .maybeSingle();
+      setSchoolName(schoolData?.name || "School name unavailable");
 
-        if (nameError) throw nameError;
-
-        fetchedSchoolName = schoolByName?.name || "";
-      }
-
-      setSchoolName(fetchedSchoolName || "School name unavailable");
+      setBranding({
+        logo_url: schoolData?.logo_url || "",
+        primary_color: schoolData?.primary_color || "#2563eb",
+      });
 
       const [studentResult, invoiceResult, paymentResult] =
         await Promise.all([
@@ -245,13 +240,13 @@ function SchoolBursary() {
     0
   );
 
-  const openPaymentForm = (studentId, invoice = null) => {
+  const openPaymentForm = (studentId) => {
     setError("");
     setNotice("");
     setSelectedStudentId(studentId);
 
     setPaymentForm({
-      invoice_id: invoice?.id || "",
+      invoice_id: "",
       amount_paid: "",
       payment_date: new Date().toISOString().slice(0, 10),
       payment_method: "cash",
@@ -355,7 +350,8 @@ function SchoolBursary() {
         <div className="text-center">
           <RefreshCw
             size={32}
-            className="mx-auto animate-spin text-blue-600"
+            className="mx-auto animate-spin"
+            style={{ color: primaryColor }}
           />
           <p className="mt-4 text-sm text-slate-500">
             Loading bursary dashboard...
@@ -367,19 +363,31 @@ function SchoolBursary() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
+      {/* Header */}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-blue-600 p-3 text-white">
-              <Wallet size={25} />
+            <div
+              className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl text-white"
+              style={{ backgroundColor: primaryColor }}
+            >
+              {branding.logo_url ? (
+                <img
+                  src={branding.logo_url}
+                  alt={schoolName}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <GraduationCap size={25} />
+              )}
             </div>
 
             <div>
               <h1 className="text-xl font-extrabold sm:text-2xl">
-                EduPortal Bursary
+                {schoolName}
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Manage school fees and student payments
+                Bursary Portal
               </p>
             </div>
           </div>
@@ -388,16 +396,21 @@ function SchoolBursary() {
             <button
               type="button"
               onClick={loadBursary}
+              disabled={loading}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold hover:bg-slate-50"
             >
-              <RefreshCw size={16} />
+              <RefreshCw
+                size={16}
+                className={loading ? "animate-spin" : ""}
+              />
               Refresh
             </button>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+              style={{ backgroundColor: primaryColor }}
             >
               <LogOut size={16} />
               Logout
@@ -407,18 +420,22 @@ function SchoolBursary() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-        <section className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 p-6 text-white sm:p-8">
-          <p className="text-sm text-blue-100">Welcome back</p>
+        {/* Welcome banner */}
+        <section
+          className="rounded-2xl p-6 text-white sm:p-8"
+          style={{ backgroundColor: primaryColor }}
+        >
+          <p className="text-sm text-white/80">Welcome back</p>
 
           <h2 className="mt-2 text-2xl font-extrabold">
-            {schoolName || "Loading school name..."}
+            {schoolName}
           </h2>
 
-          <p className="mt-1 text-sm text-blue-100">
+          <p className="mt-1 text-sm text-white/80">
             {profile?.full_name || user?.email || "Bursar"}
           </p>
 
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/80">
             Record payments accurately and monitor each student's outstanding
             school fees.
           </p>
@@ -451,25 +468,23 @@ function SchoolBursary() {
           </div>
         )}
 
+        {/* Statistics */}
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {[
             {
               label: "Total Fees Billed",
               value: totalBilled,
               icon: Receipt,
-              color: "bg-blue-50 text-blue-600",
             },
             {
               label: "Total Payments Recorded",
               value: totalCollected,
               icon: Banknote,
-              color: "bg-green-50 text-green-600",
             },
             {
               label: "Outstanding Balance",
               value: totalOutstanding,
               icon: CreditCard,
-              color: "bg-orange-50 text-orange-600",
             },
           ].map((stat) => {
             const Icon = stat.icon;
@@ -487,7 +502,13 @@ function SchoolBursary() {
                     </p>
                   </div>
 
-                  <div className={`rounded-xl p-3 ${stat.color}`}>
+                  <div
+                    className="rounded-xl p-3"
+                    style={{
+                      backgroundColor: `${primaryColor}15`,
+                      color: primaryColor,
+                    }}
+                  >
                     <Icon size={23} />
                   </div>
                 </div>
@@ -496,6 +517,7 @@ function SchoolBursary() {
           })}
         </section>
 
+        {/* Students and balances */}
         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -505,7 +527,13 @@ function SchoolBursary() {
               </p>
             </div>
 
-            <span className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700">
+            <span
+              className="rounded-full px-3 py-1.5 text-sm font-semibold"
+              style={{
+                backgroundColor: `${primaryColor}15`,
+                color: primaryColor,
+              }}
+            >
               {visibleStudents.length} students
             </span>
           </div>
@@ -519,7 +547,8 @@ function SchoolBursary() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by student name, admission number, or class..."
-              className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 outline-none focus:ring-2"
+              style={{ "--tw-ring-color": primaryColor }}
             />
           </div>
 
@@ -539,7 +568,10 @@ function SchoolBursary() {
             <div className="mt-5 overflow-x-auto">
               <table className="w-full min-w-[700px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-500">
+                  <tr
+                    className="border-b border-slate-200"
+                    style={{ color: primaryColor }}
+                  >
                     <th className="px-3 py-3 font-semibold">Student</th>
                     <th className="px-3 py-3 font-semibold">Admission No.</th>
                     <th className="px-3 py-3 font-semibold">Class</th>
@@ -575,7 +607,8 @@ function SchoolBursary() {
                           <button
                             type="button"
                             onClick={() => openPaymentForm(student.id)}
-                            className="rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                            className="rounded-lg px-3 py-2 font-semibold text-white hover:opacity-90"
+                            style={{ backgroundColor: primaryColor }}
                           >
                             Record Payment
                           </button>
@@ -589,6 +622,7 @@ function SchoolBursary() {
           )}
         </section>
 
+        {/* Recent payments */}
         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <h2 className="text-lg font-bold">Recent Payments</h2>
           <p className="mt-1 text-sm text-slate-500">
@@ -603,7 +637,10 @@ function SchoolBursary() {
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[650px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-500">
+                  <tr
+                    className="border-b border-slate-200"
+                    style={{ color: primaryColor }}
+                  >
                     <th className="px-3 py-3 font-semibold">Date</th>
                     <th className="px-3 py-3 font-semibold">Student</th>
                     <th className="px-3 py-3 font-semibold">Method</th>
@@ -651,6 +688,7 @@ function SchoolBursary() {
         </section>
       </main>
 
+      {/* Record payment modal */}
       {showPaymentForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4">
           <div className="my-auto w-full max-w-xl rounded-2xl bg-white shadow-xl">
@@ -678,6 +716,12 @@ function SchoolBursary() {
               onSubmit={handleRecordPayment}
               className="space-y-4 p-5 sm:p-6"
             >
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
               <div>
                 <label className="mb-1.5 block text-sm font-semibold">
                   Fee Invoice
@@ -693,7 +737,8 @@ function SchoolBursary() {
                       amount_paid: "",
                     }))
                   }
-                  className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:ring-2"
+                  style={{ "--tw-ring-color": primaryColor }}
                 >
                   <option value="">Select a fee invoice</option>
                   {studentInvoices.map((invoice) => (
@@ -735,7 +780,8 @@ function SchoolBursary() {
                     }))
                   }
                   placeholder="Enter amount received"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:ring-2"
+                  style={{ "--tw-ring-color": primaryColor }}
                 />
               </div>
 
@@ -754,7 +800,8 @@ function SchoolBursary() {
                         payment_date: event.target.value,
                       }))
                     }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:ring-2"
+                    style={{ "--tw-ring-color": primaryColor }}
                   />
                 </div>
 
@@ -771,7 +818,8 @@ function SchoolBursary() {
                         payment_method: event.target.value,
                       }))
                     }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:ring-2"
+                    style={{ "--tw-ring-color": primaryColor }}
                   >
                     <option value="cash">Cash</option>
                     <option value="bank_transfer">Bank Transfer</option>
@@ -795,7 +843,8 @@ function SchoolBursary() {
                     }))
                   }
                   placeholder="Receipt or transfer reference"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-3 outline-none focus:ring-2"
+                  style={{ "--tw-ring-color": primaryColor }}
                 />
               </div>
 
@@ -813,7 +862,8 @@ function SchoolBursary() {
                     }))
                   }
                   placeholder="Additional payment details"
-                  className="w-full resize-y rounded-xl border border-slate-200 px-3 py-3 outline-none focus:border-blue-500"
+                  className="w-full resize-y rounded-xl border border-slate-200 px-3 py-3 outline-none focus:ring-2"
+                  style={{ "--tw-ring-color": primaryColor }}
                 />
               </div>
 
@@ -829,7 +879,8 @@ function SchoolBursary() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ backgroundColor: primaryColor }}
                 >
                   {saving && (
                     <RefreshCw size={16} className="animate-spin" />
